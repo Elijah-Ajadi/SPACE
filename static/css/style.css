@@ -97,6 +97,8 @@ html, body {
 .node {
   position: absolute;
   width: 248px;
+  min-width: 180px;
+  min-height: 100px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent, var(--note));
@@ -109,21 +111,90 @@ html, body {
   flex-direction: column;
 }
 
+.node.has-custom-height .node-content-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.node.has-custom-height .node-content {
+  flex: 1;
+  height: 100%;
+  max-height: none;
+}
+
+.node.has-custom-height .node-img-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  height: 100%;
+}
+
+.node.has-custom-height .node-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .node:hover {
   box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent, var(--note)) inset;
 }
 
+.node.is-dragging, .node.is-resizing {
+  box-shadow: var(--shadow-lg), 0 0 20px rgba(139,92,246,0.2);
+  z-index: 1000;
+}
+
 .node.is-dragging {
   cursor: grabbing;
-  box-shadow: var(--shadow-lg), 0 0 20px rgba(139,92,246,0.2);
   transform: scale(1.02);
-  z-index: 1000;
 }
 
 .node.is-connecting-target {
   outline: 2px dashed var(--accent, var(--note));
   outline-offset: 2px;
 }
+
+/* Resize Handles */
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+  pointer-events: all;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent, var(--note));
+  opacity: 0;
+  transition: opacity var(--transition);
+  border-radius: inherit;
+}
+
+.node:hover .resize-handle::after,
+.node.is-resizing .resize-handle::after {
+  opacity: 0.25;
+}
+
+.resize-handle:hover::after {
+  opacity: 0.8 !important;
+}
+
+.rh-n  { top: -5px; left: 8px; right: 8px; height: 10px; cursor: ns-resize; }
+.rh-s  { bottom: -5px; left: 8px; right: 8px; height: 10px; cursor: ns-resize; }
+.rh-w  { left: -5px; top: 8px; bottom: 8px; width: 10px; cursor: ew-resize; }
+.rh-e  { right: -5px; top: 8px; bottom: 8px; width: 10px; cursor: ew-resize; }
+
+.rh-nw { top: -5px; left: -5px; width: 12px; height: 12px; cursor: nwse-resize; border-radius: 3px; }
+.rh-ne { top: -5px; right: -5px; width: 12px; height: 12px; cursor: nesw-resize; border-radius: 3px; }
+.rh-sw { bottom: -5px; left: -5px; width: 12px; height: 12px; cursor: nesw-resize; border-radius: 3px; }
+.rh-se { bottom: -5px; right: -5px; width: 12px; height: 12px; cursor: nwse-resize; border-radius: 3px; }
 
 /* Node Header */
 .node-header {
@@ -252,6 +323,25 @@ html, body {
 .node[data-type="CODE"]   { --accent: var(--code); }
 .node[data-type="TODO"]   { --accent: var(--todo); }
 .node[data-type="CANVAS"] { --accent: var(--canvas); }
+.node[data-type="IMAGE"]  { --accent: #ec4899; width: auto; max-width: 360px; }
+
+/* Image node */
+.node-img-wrap {
+  padding: 0 0 8px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+  line-height: 0;
+}
+
+.node-img {
+  width: 100%;
+  max-width: 360px;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+  display: block;
+  background: #000;
+}
 
 /* ============================================
    UI OVERLAY

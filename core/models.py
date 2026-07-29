@@ -7,6 +7,7 @@ class Entity(models.Model):
         ('CANVAS', 'Canvas'),
         ('TODO', 'Todo'),
         ('CODE', 'Code'),
+        ('IMAGE', 'Image'),
     ]
 
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -15,6 +16,8 @@ class Entity(models.Model):
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='NOTE')
     position_x = models.FloatField(default=0.0)
     position_y = models.FloatField(default=0.0)
+    width = models.FloatField(default=0.0)
+    height = models.FloatField(default=0.0)
     color = models.CharField(max_length=7, default='#18181b')  # Hex code
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

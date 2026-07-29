@@ -22,6 +22,12 @@ const S = {
   isDraggingNode:  false,
   dragUUID:        null,
   dragOffX:        0, dragOffY: 0,
+  isResizingNode:  false,
+  resizeUUID:      null,
+  resizeHandle:    null,
+  resizeStartMouse: { x: 0, y: 0 },
+  resizeStartPos:   { x: 0, y: 0 },
+  resizeStartSize:  { w: 0, h: 0 },
   connectingFrom:  null,    // uuid of source during connect mode
   saveTimer:       null,
 };
@@ -32,6 +38,7 @@ const TYPES = {
   CODE:   { color: '#10b981', icon: '⌥', label: 'Code'   },
   TODO:   { color: '#f59e0b', icon: '◎', label: 'Todo'   },
   CANVAS: { color: '#3b82f6', icon: '⬡', label: 'Canvas' },
+  IMAGE:  { color: '#ec4899', icon: '⬜', label: 'Image'  },
 };
 
 // ── Utilities ────────────────────────────────
@@ -105,9 +112,9 @@ function renderConnections() {
 
     const sEl = document.querySelector(`.node[data-uuid="${b.source}"]`);
     const tEl = document.querySelector(`.node[data-uuid="${b.target}"]`);
-    const sw = sEl?.offsetWidth  ?? 248;
-    const sh = sEl?.offsetHeight ?? 140;
-    const th = tEl?.offsetHeight ?? 140;
+    const sw = sEl?.offsetWidth  ?? (se.width  > 0 ? se.width  : 248);
+    const sh = sEl?.offsetHeight ?? (se.height > 0 ? se.height : 140);
+    const th = tEl?.offsetHeight ?? (te.height > 0 ? te.height : 140);
 
     const x1 = se.position_x + sw, y1 = se.position_y + sh / 2;
     const x2 = te.position_x,      y2 = te.position_y + th / 2;
@@ -147,6 +154,19 @@ function renderNode(entity) {
   el.style.top      = `${entity.position_y}px`;
   el.style.setProperty('--accent', ac);
 
+  if (entity.width && entity.width > 0) {
+    el.style.width = `${entity.width}px`;
+  }
+  if (entity.height && entity.height > 0) {
+    el.style.height = `${entity.height}px`;
+    el.classList.add('has-custom-height');
+  }
+
+  const isImage = entity.type === 'IMAGE';
+  const contentHtml = isImage
+    ? `<div class="node-img-wrap"><img class="node-img" src="${entity.content}" alt="${esc(entity.title)}"/></div>`
+    : `<div class="node-content-wrap"><textarea class="node-content" placeholder="Add content...">${esc(entity.content ?? '')}</textarea></div>`;
+
   el.innerHTML = `
     <div class="node-header">
       <div class="node-header-left">
@@ -161,9 +181,7 @@ function renderNode(entity) {
     <div class="node-title-wrap">
       <div class="node-title" contenteditable="true" spellcheck="false">${esc(entity.title)}</div>
     </div>
-    <div class="node-content-wrap">
-      <textarea class="node-content" placeholder="Add content...">${esc(entity.content ?? '')}</textarea>
-    </div>`;
+    ${contentHtml}`;
 
   // ── Drag ──────────────────────────────────
   el.querySelector('.node-header').addEventListener('mousedown', e => {
@@ -188,17 +206,19 @@ function renderNode(entity) {
     debounce(() => API.patchEntity(uuid, { title: entity.title }).then(() => setStatus('All changes saved')));
   });
 
-  // ── Content Edit ──────────────────────────
+  // ── Content Edit (text types only) ──────────────────────
   const contentEl = el.querySelector('.node-content');
-  contentEl.addEventListener('mousedown', e => e.stopPropagation());
-  contentEl.addEventListener('input', () => {
-    entity.content = contentEl.value;
-    setStatus('Saving…', 'saving');
-    debounce(() => {
-      API.patchEntity(uuid, { content: entity.content }).then(() => setStatus('All changes saved'));
-      renderConnections();
+  if (contentEl) {
+    contentEl.addEventListener('mousedown', e => e.stopPropagation());
+    contentEl.addEventListener('input', () => {
+      entity.content = contentEl.value;
+      setStatus('Saving…', 'saving');
+      debounce(() => {
+        API.patchEntity(uuid, { content: entity.content }).then(() => setStatus('All changes saved'));
+        renderConnections();
+      });
     });
-  });
+  }
 
   // ── Connect Button ────────────────────────
   el.querySelector('.btn-connect').addEventListener('click', e => {
@@ -224,11 +244,29 @@ function renderNode(entity) {
     setStatus('All changes saved');
   });
 
-  // ── Click in connecting mode ──────────────
-  el.addEventListener('click', e => {
-    if (!S.connectingFrom || S.connectingFrom === uuid) return;
-    e.stopPropagation();
-    doConnect(S.connectingFrom, uuid);
+  // ── Resize Handles ─────────────────────────
+  ['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'].forEach(dir => {
+    const rh = document.createElement('div');
+    rh.className = `resize-handle rh-${dir}`;
+    rh.dataset.handle = dir;
+    rh.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      const rect = el.getBoundingClientRect();
+      const currentW = (entity.width && entity.width > 0) ? entity.width : rect.width / S.zoom;
+      const currentH = (entity.height && entity.height > 0) ? entity.height : rect.height / S.zoom;
+
+      Object.assign(S, {
+        isResizingNode: true,
+        resizeUUID: uuid,
+        resizeHandle: dir,
+        resizeStartMouse: { x: e.clientX, y: e.clientY },
+        resizeStartPos:   { x: entity.position_x, y: entity.position_y },
+        resizeStartSize:  { w: currentW, h: currentH },
+      });
+
+      el.classList.add('is-resizing');
+    });
+    el.appendChild(rh);
   });
 
   nodesLayer.appendChild(el);
@@ -283,8 +321,68 @@ viewport.addEventListener('mousedown', e => {
   viewport.classList.add('is-grabbing');
 });
 
-// ── Mousemove (pan + drag) ───────────────────
+// ── Mousemove (pan + drag + resize) ──────────
 window.addEventListener('mousemove', e => {
+  if (S.isResizingNode && S.resizeUUID) {
+    const entity = S.entities.get(S.resizeUUID);
+    const el = document.querySelector(`.node[data-uuid="${S.resizeUUID}"]`);
+    if (!entity || !el) return;
+
+    const dx = (e.clientX - S.resizeStartMouse.x) / S.zoom;
+    const dy = (e.clientY - S.resizeStartMouse.y) / S.zoom;
+
+    const minW = 180;
+    const minH = 100;
+
+    let newW = S.resizeStartSize.w;
+    let newH = S.resizeStartSize.h;
+    let newX = S.resizeStartPos.x;
+    let newY = S.resizeStartPos.y;
+
+    const h = S.resizeHandle;
+
+    if (h.includes('e')) {
+      newW = Math.max(minW, S.resizeStartSize.w + dx);
+    }
+    if (h.includes('s')) {
+      newH = Math.max(minH, S.resizeStartSize.h + dy);
+    }
+    if (h.includes('w')) {
+      const possibleW = S.resizeStartSize.w - dx;
+      if (possibleW >= minW) {
+        newW = possibleW;
+        newX = S.resizeStartPos.x + dx;
+      } else {
+        newW = minW;
+        newX = S.resizeStartPos.x + (S.resizeStartSize.w - minW);
+      }
+    }
+    if (h.includes('n')) {
+      const possibleH = S.resizeStartSize.h - dy;
+      if (possibleH >= minH) {
+        newH = possibleH;
+        newY = S.resizeStartPos.y + dy;
+      } else {
+        newH = minH;
+        newY = S.resizeStartPos.y + (S.resizeStartSize.h - minH);
+      }
+    }
+
+    entity.width = Math.round(newW);
+    entity.height = Math.round(newH);
+    entity.position_x = Math.round(newX);
+    entity.position_y = Math.round(newY);
+
+    el.style.width = `${entity.width}px`;
+    el.style.height = `${entity.height}px`;
+    el.style.left = `${entity.position_x}px`;
+    el.style.top = `${entity.position_y}px`;
+    el.classList.add('has-custom-height');
+
+    renderConnections();
+    return;
+  }
+
   if (S.isDraggingNode && S.dragUUID) {
     const wp = screenToWorld(e.clientX, e.clientY);
     const entity = S.entities.get(S.dragUUID);
@@ -305,6 +403,23 @@ window.addEventListener('mousemove', e => {
 
 // ── Mouseup ───────────────────────────────────
 window.addEventListener('mouseup', () => {
+  if (S.isResizingNode && S.resizeUUID) {
+    const entity = S.entities.get(S.resizeUUID);
+    const el = document.querySelector(`.node[data-uuid="${S.resizeUUID}"]`);
+    if (el) el.classList.remove('is-resizing');
+    if (entity) {
+      setStatus('Saving…', 'saving');
+      API.patchEntity(S.resizeUUID, {
+        position_x: entity.position_x,
+        position_y: entity.position_y,
+        width: entity.width,
+        height: entity.height,
+      }).then(() => setStatus('All changes saved'));
+    }
+  }
+  S.isResizingNode = false;
+  S.resizeUUID     = null;
+
   if (S.isDraggingNode && S.dragUUID) {
     const entity = S.entities.get(S.dragUUID);
     const el = document.querySelector(`.node[data-uuid="${S.dragUUID}"]`);
@@ -409,6 +524,59 @@ addNodeBtn.addEventListener('click', e => { e.stopPropagation(); showTypePicker(
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') { cancelConnect(); hideTypePicker(); }
   if ((e.altKey || e.metaKey) && e.key === 'n') { e.preventDefault(); showTypePicker(); }
+});
+
+// ── Clipboard Paste → Auto-Create Node ───────
+async function spawnNode(type, title, content) {
+  const center = viewCenter();
+  // Slight random offset so multiple pastes don't stack exactly
+  const jitter = () => (Math.random() - 0.5) * 40;
+  const data = await API.createEntity({
+    title,
+    content,
+    type,
+    position_x: center.x - 124 + jitter(),
+    position_y: center.y - 70  + jitter(),
+    color: '#18181b',
+  });
+  const full = await fetch(`/entities/${data.uuid}/`).then(r => r.json());
+  S.entities.set(String(full.uuid), full);
+  renderNode(full);
+  renderConnections();
+  setStatus('All changes saved');
+}
+
+window.addEventListener('paste', async e => {
+  // Skip if user is editing a field inside a node
+  if (e.target.matches('textarea, input, [contenteditable="true"]')) return;
+
+  const items = Array.from(e.clipboardData?.items ?? []);
+
+  // ── Image paste ──────────────────────────────
+  const imgItem = items.find(i => i.type.startsWith('image/'));
+  if (imgItem) {
+    e.preventDefault();
+    const file = imgItem.getAsFile();
+    const reader = new FileReader();
+    reader.onload = ev => spawnNode('IMAGE', 'Pasted Image', ev.target.result);
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  // ── Text paste ───────────────────────────────
+  const textItem = items.find(i => i.type === 'text/plain');
+  if (textItem) {
+    e.preventDefault();
+    textItem.getAsString(text => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      // Use first line as title, rest as content
+      const lines   = trimmed.split('\n');
+      const title   = lines[0].slice(0, 80) || 'Pasted Note';
+      const content = lines.length > 1 ? lines.slice(1).join('\n').trim() : '';
+      spawnNode('NOTE', title, content);
+    });
+  }
 });
 
 // ── Init ─────────────────────────────────────

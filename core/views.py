@@ -21,6 +21,8 @@ def entity_list_create(request):
             type=data.get('type', 'NOTE'),
             position_x=data.get('position_x', 0.0),
             position_y=data.get('position_y', 0.0),
+            width=data.get('width', 0.0),
+            height=data.get('height', 0.0),
             color=data.get('color', '#18181b')
         )
         return JsonResponse({
@@ -28,7 +30,9 @@ def entity_list_create(request):
             'title': entity.title,
             'type': entity.type,
             'position_x': entity.position_x,
-            'position_y': entity.position_y
+            'position_y': entity.position_y,
+            'width': entity.width,
+            'height': entity.height
         }, status=201)
 
 @csrf_exempt
@@ -43,6 +47,8 @@ def entity_detail(request, uuid):
             'type': entity.type,
             'position_x': entity.position_x,
             'position_y': entity.position_y,
+            'width': entity.width,
+            'height': entity.height,
             'color': entity.color
         })
     
@@ -53,6 +59,8 @@ def entity_detail(request, uuid):
         if 'type' in data: entity.type = data['type']
         if 'position_x' in data: entity.position_x = data['position_x']
         if 'position_y' in data: entity.position_y = data['position_y']
+        if 'width' in data: entity.width = data['width']
+        if 'height' in data: entity.height = data['height']
         if 'color' in data: entity.color = data['color']
         entity.save()
         return JsonResponse({'status': 'updated'})
