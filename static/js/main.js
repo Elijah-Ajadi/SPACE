@@ -14,6 +14,7 @@ const saveStatus = document.getElementById('save-status');
 const loadingOverlay = document.getElementById('loading-overlay');
 
 // ── State ────────────────────────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────────────────────────
 const S = {
   zoom: 1, panX: 0, panY: 0,
   entities: new Map(),   // uuid → entity object
@@ -23,6 +24,7 @@ const S = {
   isDraggingNode: false,
   dragUUID: null,
   dragOffX: 0, dragOffY: 0,
+  dragStartPos: { x: 0, y: 0 },
   isResizingNode: false,
   resizeUUID: null,
   resizeHandle: null,
@@ -32,6 +34,148 @@ const S = {
   connectingFrom: null,
   saveTimer: null,
 };
+
+// ── Grid Snapping ────────────────────────────────────────────────────────────
+const GRID_SIZE = 20;
+function snap(val) {
+  return Math.round(val / GRID_SIZE) * GRID_SIZE;
+}
+
+// ── Undo / Redo Engine ────────────────────────────────────────────────────────
+const UndoRedo = {
+  undoStack: [],
+  redoStack: [],
+
+  push(action) {
+    this.undoStack.push(action);
+    this.redoStack = []; // Clear redo stack on new action
+    if (this.undoStack.length > 50) this.undoStack.shift();
+  },
+
+  undo() {
+    const action = this.undoStack.pop();
+    if (!action) {
+      setStatus('Nothing to undo', 'error');
+      return;
+    }
+    action.undo();
+    this.redoStack.push(action);
+    setStatus('Action undone');
+  },
+
+  redo() {
+    const action = this.redoStack.pop();
+    if (!action) {
+      setStatus('Nothing to redo', 'error');
+      return;
+    }
+    action.redo();
+    this.undoStack.push(action);
+    setStatus('Action redone');
+  }
+};
+
+// ── Mini-map Navigation Logic ────────────────────────────────────────────────
+function getCanvasBounds() {
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+
+  if (S.entities.size === 0) {
+    return { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000, width: 2000, height: 2000 };
+  }
+
+  S.entities.forEach(entity => {
+    minX = Math.min(minX, entity.position_x);
+    maxX = Math.max(maxX, entity.position_x + (entity.width || 248));
+    minY = Math.min(minY, entity.position_y);
+    maxY = Math.max(maxY, entity.position_y + (entity.height || 140));
+  });
+
+  const pad = 600;
+  return {
+    minX: minX - pad,
+    maxX: maxX + pad,
+    minY: minY - pad,
+    maxY: maxY + pad,
+    width: (maxX - minX) + pad * 2,
+    height: (maxY - minY) + pad * 2
+  };
+}
+
+function updateMinimap() {
+  let minimap = document.getElementById('minimap-container');
+  if (!minimap) {
+    minimap = document.createElement('div');
+    minimap.id = 'minimap-container';
+    minimap.innerHTML = `<div id="minimap-viewport"></div>`;
+    document.getElementById('ui-overlay').appendChild(minimap);
+
+    minimap.addEventListener('click', e => {
+      if (e.target.classList.contains('minimap-node')) return;
+      const rect = minimap.getBoundingClientRect();
+      const clickX = (e.clientX - rect.left) / rect.width;
+      const clickY = (e.clientY - rect.top) / rect.height;
+
+      const bounds = getCanvasBounds();
+      const targetWorldX = bounds.minX + clickX * bounds.width;
+      const targetWorldY = bounds.minY + clickY * bounds.height;
+      centerViewportOn(targetWorldX, targetWorldY);
+    });
+  }
+
+  const bounds = getCanvasBounds();
+  const mmW = 160;
+  const mmH = 120;
+
+  // Clear previous node markers
+  minimap.querySelectorAll('.minimap-node').forEach(n => n.remove());
+
+  // Render mini node dots
+  S.entities.forEach(entity => {
+    const isCollapsed = document.querySelector(`.node[data-uuid="${entity.uuid}"]`)?.classList.contains('is-collapsed');
+    const div = document.createElement('div');
+    div.className = 'minimap-node';
+    const xPct = (entity.position_x - bounds.minX) / bounds.width;
+    const yPct = (entity.position_y - bounds.minY) / bounds.height;
+    const wPct = (entity.width || 248) / bounds.width;
+    const hPct = (isCollapsed ? 42 : (entity.height || 140)) / bounds.height;
+
+    div.style.left = `${xPct * mmW}px`;
+    div.style.top = `${yPct * mmH}px`;
+    div.style.width = `${Math.max(4, wPct * mmW)}px`;
+    div.style.height = `${Math.max(3, hPct * mmH)}px`;
+    div.style.background = accent(entity);
+    minimap.appendChild(div);
+  });
+
+  // Calculate and align view rectangle
+  const vpEl = document.getElementById('minimap-viewport');
+  if (vpEl) {
+    const screenW = viewport.clientWidth;
+    const screenH = viewport.clientHeight;
+
+    const topLeft = screenToWorld(0, 0);
+    const bottomRight = screenToWorld(screenW, screenH);
+
+    const vpX = (topLeft.x - bounds.minX) / bounds.width;
+    const vpY = (topLeft.y - bounds.minY) / bounds.height;
+    const vpW = (bottomRight.x - topLeft.x) / bounds.width;
+    const vpH = (bottomRight.y - topLeft.y) / bounds.height;
+
+    vpEl.style.left = `${Math.max(0, Math.min(mmW, vpX * mmW))}px`;
+    vpEl.style.top = `${Math.max(0, Math.min(mmH, vpY * mmH))}px`;
+    vpEl.style.width = `${Math.max(8, Math.min(mmW, vpW * mmW))}px`;
+    vpEl.style.height = `${Math.max(6, Math.min(mmH, vpH * mmH))}px`;
+  }
+}
+
+function centerViewportOn(worldX, worldY) {
+  const cx = viewport.clientWidth / 2;
+  const cy = viewport.clientHeight / 2;
+  S.panX = cx - worldX * S.zoom;
+  S.panY = cy - worldY * S.zoom;
+  applyTransform();
+}
 
 // ── Type Config ──────────────────────────────────────────────────────────────
 const TYPES = {
@@ -76,6 +220,7 @@ function applyTransform() {
   world.style.transform = `translate(${S.panX}px,${S.panY}px) scale(${S.zoom})`;
   zoomSlider.value = S.zoom;
   zoomIndicator.textContent = `${Math.round(S.zoom * 100)}%`;
+  updateMinimap();
 }
 
 function screenToWorld(sx, sy) {
@@ -332,6 +477,7 @@ function renderNode(entity) {
   el.innerHTML = `
     <div class="node-header">
       <div class="node-header-left">
+        <button class="node-btn-collapse" title="Collapse/Expand node">▼</button>
         <span class="node-icon">${conf.icon}</span>
         <span class="node-type-badge" style="color:${ac}">${conf.label}</span>
       </div>
@@ -348,16 +494,25 @@ function renderNode(entity) {
 
   // ── Drag ──────────────────────────────────────────────────────────────────
   el.querySelector('.node-header').addEventListener('mousedown', e => {
-    if (e.target.classList.contains('node-btn') || e.target.closest('.node-code-header-addon')) return;
+    if (e.target.classList.contains('node-btn') || e.target.closest('.node-code-header-addon') || e.target.classList.contains('node-btn-collapse')) return;
     e.preventDefault(); e.stopPropagation();
     const wp = screenToWorld(e.clientX, e.clientY);
     Object.assign(S, {
       isDraggingNode: true, dragUUID: uuid,
       dragOffX: wp.x - entity.position_x,
       dragOffY: wp.y - entity.position_y,
+      dragStartPos: { x: entity.position_x, y: entity.position_y },
     });
     el.classList.add('is-dragging');
     viewport.classList.add('is-grabbing');
+  });
+
+  // ── Collapse Button ───────────────────────────────────────────────────────
+  el.querySelector('.node-btn-collapse').addEventListener('click', e => {
+    e.stopPropagation();
+    el.classList.toggle('is-collapsed');
+    renderConnections();
+    updateMinimap();
   });
 
   // ── Title Edit ────────────────────────────────────────────────────────────
@@ -736,16 +891,16 @@ window.addEventListener('mousemove', e => {
     let newY = S.resizeStartPos.y;
 
     const h = S.resizeHandle;
-    if (h.includes('e')) newW = Math.max(minW, S.resizeStartSize.w + dx);
-    if (h.includes('s')) newH = Math.max(minH, S.resizeStartSize.h + dy);
+    if (h.includes('e')) newW = Math.max(minW, snap(S.resizeStartSize.w + dx));
+    if (h.includes('s')) newH = Math.max(minH, snap(S.resizeStartSize.h + dy));
     if (h.includes('w')) {
-      const pW = S.resizeStartSize.w - dx;
-      if (pW >= minW) { newW = pW; newX = S.resizeStartPos.x + dx; }
+      const pW = snap(S.resizeStartSize.w - dx);
+      if (pW >= minW) { newW = pW; newX = snap(S.resizeStartPos.x + dx); }
       else { newW = minW; newX = S.resizeStartPos.x + (S.resizeStartSize.w - minW); }
     }
     if (h.includes('n')) {
-      const pH = S.resizeStartSize.h - dy;
-      if (pH >= minH) { newH = pH; newY = S.resizeStartPos.y + dy; }
+      const pH = snap(S.resizeStartSize.h - dy);
+      if (pH >= minH) { newH = pH; newY = snap(S.resizeStartPos.y + dy); }
       else { newH = minH; newY = S.resizeStartPos.y + (S.resizeStartSize.h - minH); }
     }
 
@@ -761,6 +916,7 @@ window.addEventListener('mousemove', e => {
     el.classList.add('has-custom-height');
 
     renderConnections();
+    updateMinimap();
     return;
   }
 
@@ -768,11 +924,12 @@ window.addEventListener('mousemove', e => {
     const wp = screenToWorld(e.clientX, e.clientY);
     const entity = S.entities.get(S.dragUUID);
     if (!entity) return;
-    entity.position_x = wp.x - S.dragOffX;
-    entity.position_y = wp.y - S.dragOffY;
+    entity.position_x = snap(wp.x - S.dragOffX);
+    entity.position_y = snap(wp.y - S.dragOffY);
     const el = document.querySelector(`.node[data-uuid="${S.dragUUID}"]`);
     if (el) { el.style.left = `${entity.position_x}px`; el.style.top = `${entity.position_y}px`; }
     renderConnections();
+    updateMinimap();
     return;
   }
 
@@ -790,6 +947,47 @@ window.addEventListener('mouseup', () => {
     const el = document.querySelector(`.node[data-uuid="${S.resizeUUID}"]`);
     if (el) el.classList.remove('is-resizing');
     if (entity) {
+      const uuid = S.resizeUUID;
+      const oldX = S.resizeStartPos.x, oldY = S.resizeStartPos.y;
+      const oldW = S.resizeStartSize.w, oldH = S.resizeStartSize.h;
+      const newX = entity.position_x, newY = entity.position_y;
+      const newW = entity.width, newH = entity.height;
+
+      if (oldW !== newW || oldH !== newH || oldX !== newX || oldY !== newY) {
+        UndoRedo.push({
+          undo: () => {
+            const ent = S.entities.get(uuid);
+            if (ent) {
+              ent.position_x = oldX; ent.position_y = oldY;
+              ent.width = oldW; ent.height = oldH;
+              const nodeEl = document.querySelector(`.node[data-uuid="${uuid}"]`);
+              if (nodeEl) {
+                nodeEl.style.left = `${oldX}px`; nodeEl.style.top = `${oldY}px`;
+                nodeEl.style.width = `${oldW}px`; nodeEl.style.height = `${oldH}px`;
+              }
+              API.patchEntity(uuid, { position_x: oldX, position_y: oldY, width: oldW, height: oldH });
+              renderConnections();
+              updateMinimap();
+            }
+          },
+          redo: () => {
+            const ent = S.entities.get(uuid);
+            if (ent) {
+              ent.position_x = newX; ent.position_y = newY;
+              ent.width = newW; ent.height = newH;
+              const nodeEl = document.querySelector(`.node[data-uuid="${uuid}"]`);
+              if (nodeEl) {
+                nodeEl.style.left = `${newX}px`; nodeEl.style.top = `${newY}px`;
+                nodeEl.style.width = `${newW}px`; nodeEl.style.height = `${newH}px`;
+              }
+              API.patchEntity(uuid, { position_x: newX, position_y: newY, width: newW, height: newH });
+              renderConnections();
+              updateMinimap();
+            }
+          }
+        });
+      }
+
       setStatus('Saving…', 'saving');
       API.patchEntity(S.resizeUUID, {
         position_x: entity.position_x, position_y: entity.position_y,
@@ -807,6 +1005,37 @@ window.addEventListener('mouseup', () => {
     const el = document.querySelector(`.node[data-uuid="${S.dragUUID}"]`);
     if (el) el.classList.remove('is-dragging');
     if (entity) {
+      const uuid = S.dragUUID;
+      const oldX = S.dragStartPos.x, oldY = S.dragStartPos.y;
+      const newX = entity.position_x, newY = entity.position_y;
+
+      if (oldX !== newX || oldY !== newY) {
+        UndoRedo.push({
+          undo: () => {
+            const ent = S.entities.get(uuid);
+            if (ent) {
+              ent.position_x = oldX; ent.position_y = oldY;
+              const nodeEl = document.querySelector(`.node[data-uuid="${uuid}"]`);
+              if (nodeEl) { nodeEl.style.left = `${oldX}px`; nodeEl.style.top = `${oldY}px`; }
+              API.patchEntity(uuid, { position_x: oldX, position_y: oldY });
+              renderConnections();
+              updateMinimap();
+            }
+          },
+          redo: () => {
+            const ent = S.entities.get(uuid);
+            if (ent) {
+              ent.position_x = newX; ent.position_y = newY;
+              const nodeEl = document.querySelector(`.node[data-uuid="${uuid}"]`);
+              if (nodeEl) { nodeEl.style.left = `${newX}px`; nodeEl.style.top = `${newY}px`; }
+              API.patchEntity(uuid, { position_x: newX, position_y: newY });
+              renderConnections();
+              updateMinimap();
+            }
+          }
+        });
+      }
+
       setStatus('Saving…', 'saving');
       API.patchEntity(S.dragUUID, {
         position_x: entity.position_x,
@@ -912,6 +1141,8 @@ addNodeBtn.addEventListener('click', e => { e.stopPropagation(); showTypePicker(
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') { cancelConnect(); hideTypePicker(); }
   if ((e.altKey || e.metaKey) && e.key === 'n') { e.preventDefault(); showTypePicker(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); UndoRedo.undo(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); UndoRedo.redo(); }
 });
 
 // ── Clipboard Paste → Auto-Create Node ───────────────────────────────────────

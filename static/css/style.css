@@ -894,6 +894,7 @@ body {
 
 .zoom-slider {
   -webkit-appearance: none;
+  appearance: none;
   width: 80px;
   height: 2px;
   border-radius: 2px;
@@ -1045,4 +1046,158 @@ body.is-connecting .node:not(.connecting-source):hover {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ============================================
+   GOD-TIER UI ADDITIONS
+   ============================================ */
+
+/* Glassmorphism theme & Glow overlays */
+.node {
+  background: rgba(20, 20, 25, 0.72) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0px 0px transparent;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.node:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), 0 0 15px rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.node:focus-within {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), 0 0 20px var(--accent, var(--note));
+  border-color: var(--accent) !important;
+}
+
+/* Collapsible node structure */
+.node.is-collapsed {
+  height: auto !important;
+  /* Allow folding to content */
+  min-height: 0 !important;
+}
+
+.node.is-collapsed .node-content-wrap,
+.node.is-collapsed .node-code-container,
+.node.is-collapsed .node-todo-container,
+.node.is-collapsed .node-draw-controls,
+.node.is-collapsed .node-draw-board-wrap,
+.node.is-collapsed .node-img-wrap,
+.node.is-collapsed .node-code-header-addon {
+  display: none !important;
+}
+
+.node-btn-collapse {
+  font-size: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  transition: transform var(--transition), color var(--transition);
+}
+
+.node-btn-collapse:hover {
+  color: var(--text);
+}
+
+.node.is-collapsed .node-btn-collapse {
+  transform: rotate(-90deg);
+}
+
+/* Custom modern scrollbars */
+.node-note-preview::-webkit-scrollbar,
+.node-code-editor::-webkit-scrollbar,
+.node-todo-list::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.node-note-preview::-webkit-scrollbar-track,
+.node-code-editor::-webkit-scrollbar-track,
+.node-todo-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.node-note-preview::-webkit-scrollbar-thumb,
+.node-code-editor::-webkit-scrollbar-thumb,
+.node-todo-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+.node-note-preview::-webkit-scrollbar-thumb:hover,
+.node-code-editor::-webkit-scrollbar-thumb:hover,
+.node-todo-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Toolbar Glassmorphism */
+.toolbar {
+  background: rgba(24, 24, 27, 0.72) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Animated SVG Connections */
+@keyframes flowDash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.connection-path {
+  stroke-dasharray: 6, 4;
+  animation: flowDash 1.2s linear infinite;
+  transition: stroke 0.3s ease, stroke-width 0.3s ease;
+  cursor: pointer;
+}
+
+.connection-path:hover {
+  stroke-width: 4px !important;
+  stroke: #ef4444 !important;
+  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.6));
+}
+
+/* Floating Mini-Map Navigator */
+#minimap-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 160px;
+  height: 120px;
+  background: rgba(15, 15, 20, 0.84);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  z-index: 1000;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+#minimap-container:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+#minimap-viewport {
+  position: absolute;
+  border: 1px solid var(--note);
+  background: rgba(139, 92, 246, 0.06);
+  pointer-events: none;
+}
+
+.minimap-node {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 1px;
+  pointer-events: none;
+  min-width: 3px;
+  min-height: 2px;
 }
