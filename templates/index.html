@@ -10,6 +10,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500&family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Loading overlay — hidden by JS once data is ready -->
+    <div id="loading-overlay" aria-live="polite" aria-label="Loading canvas">
+        <div class="loading-spinner"></div>
+        <span class="loading-label">Loading canvas…</span>
+    </div>
+
     <div id="viewport">
         <div id="world">
             <svg id="connections-layer"></svg>
@@ -22,7 +28,7 @@
         <div class="toolbar">
             <button id="add-node" title="Add Note (Alt+N)">+</button>
             <div class="zoom-container">
-                <div class="zoom-indicator" id="zoom-indicator" title="Click to show slider">100%</div>
+                <div class="zoom-indicator" id="zoom-indicator" title="Click to reset zoom">100%</div>
                 <input type="range" id="zoom-slider" class="zoom-slider" min="0.1" max="5" step="0.1" value="1">
             </div>
         </div>
