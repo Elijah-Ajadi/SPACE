@@ -132,7 +132,8 @@ body {
   min-height: 0;
 }
 
-.node.has-custom-height .node-content {
+.node.has-custom-height .node-content,
+.node.has-custom-height .node-note-preview {
   flex: 1;
   height: 100%;
   max-height: none;
@@ -439,7 +440,9 @@ body {
   font-size: 12px;
   line-height: 1.5;
   overflow-y: auto;
-  max-height: 250px;
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
   user-select: text;
   cursor: pointer;
 }

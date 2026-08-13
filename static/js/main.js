@@ -399,7 +399,7 @@ function renderNode(entity) {
   }
   else if (entity.type === 'NOTE') {
     templateBody = `
-      <div class="node-note-preview" title="Double-click to edit note">${parseMarkdown(entity.content)}</div>
+      <div class="node-note-preview" title="Click to edit note">${parseMarkdown(entity.content)}</div>
       <div class="node-content-wrap" style="display:none;">
         <textarea class="node-content" placeholder="Add note content…">${esc(entity.content ?? '')}</textarea>
       </div>`;
@@ -536,11 +536,30 @@ function renderNode(entity) {
     const wrapEl = el.querySelector('.node-content-wrap');
     const textarea = el.querySelector('.node-content');
 
+    const openEditMode = () => {
+      previewEl.style.display = 'none';
+      wrapEl.style.display = 'flex';
+      textarea.focus();
+    };
+
+    let downX = 0, downY = 0;
+    previewEl.addEventListener('mousedown', e => {
+      downX = e.clientX;
+      downY = e.clientY;
+      e.stopPropagation();
+    });
+
+    previewEl.addEventListener('click', e => {
+      const dist = Math.hypot(e.clientX - downX, e.clientY - downY);
+      if (dist < 5) {
+        e.stopPropagation();
+        openEditMode();
+      }
+    });
+
     previewEl.addEventListener('dblclick', e => {
       e.stopPropagation();
-      previewEl.style.display = 'none';
-      wrapEl.style.display = 'block';
-      textarea.focus();
+      openEditMode();
     });
 
     textarea.addEventListener('mousedown', e => e.stopPropagation());
@@ -548,7 +567,7 @@ function renderNode(entity) {
       entity.content = textarea.value;
       previewEl.innerHTML = parseMarkdown(entity.content);
       wrapEl.style.display = 'none';
-      previewEl.style.display = 'block';
+      previewEl.style.display = 'flex';
 
       setStatus('Saving…', 'saving');
       API.patchEntity(uuid, { content: entity.content })
