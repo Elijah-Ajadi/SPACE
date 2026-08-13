@@ -321,7 +321,7 @@ function renderConnections() {
     const x2 = te.position_x, y2 = te.position_y + th / 2;
     const cx = Math.max(Math.abs(x2 - x1) * 0.5, 60);
 
-    return `<path class="connection-path" data-id="${b.id}"
+    return `<path class="connection-path" data-id="${b.id}" data-source="${b.source}" data-target="${b.target}"
       d="M${x1} ${y1} C${x1 + cx} ${y1},${x2 - cx} ${y2},${x2} ${y2}"
       stroke="${accent(se)}" marker-end="url(#ah-${se.type})"/>`;
   }).join('');
@@ -828,6 +828,10 @@ function renderAll() {
   nodesLayer.innerHTML = '';
   S.entities.forEach(e => renderNode(e));
   renderConnections();
+  if (typeof refreshTagBar === 'function') refreshTagBar();
+  if (typeof window._refreshSidebar === 'function') window._refreshSidebar();
+  if (typeof startParticleFlow === 'function') startParticleFlow();
+  updateMinimap();
 }
 
 // ── Connection Mode ───────────────────────────────────────────────────────────
@@ -1208,7 +1212,675 @@ window.addEventListener('unhandledrejection', e => {
   setStatus(`Unexpected error: ${e.reason?.message ?? e.reason}`, 'error');
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ════════════════  GOD ULTRA — ALL 15 FEATURES  ════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ══ [1] DYNAMIC BACKGROUND CURSOR SHADER ────────────────────────────────────
+viewport.addEventListener('mousemove', e => {
+  const r = viewport.getBoundingClientRect();
+  viewport.style.setProperty('--cursor-x', `${e.clientX - r.left}px`);
+  viewport.style.setProperty('--cursor-y', `${e.clientY - r.top}px`);
+});
+
+// ══ [2] TOOLBAR EXTRA BUTTONS (Zoom-Fit, Export PNG, Sidebar toggle, JSON) ─
+(function buildToolbarExtras() {
+  const toolbar = document.querySelector('.toolbar');
+  const extra = document.createElement('div');
+  extra.className = 'toolbar-extra';
+  extra.innerHTML = `
+    <button class="toolbar-icon-btn" id="btn-zoom-fit" title="Zoom to Fit (Ctrl+0)">⊡</button>
+    <button class="toolbar-icon-btn" id="btn-export-png" title="Export as PNG">📷</button>
+    <button class="toolbar-icon-btn" id="btn-export-json" title="Export as JSON">{ }</button>
+    <button class="toolbar-icon-btn" id="btn-auto-layout" title="Auto-Layout Nodes">⧉</button>`;
+  toolbar.appendChild(extra);
+
+  // Sidebar toggle button
+  const sidebarToggle = document.createElement('button');
+  sidebarToggle.id = 'sidebar-toggle';
+  sidebarToggle.textContent = '⊞ Panel';
+  document.body.appendChild(sidebarToggle);
+})();
+
+// ══ [3] ZOOM TO FIT (Ctrl+0) ────────────────────────────────────────────────
+function zoomToFit() {
+  if (S.entities.size === 0) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  S.entities.forEach(e => {
+    minX = Math.min(minX, e.position_x);
+    maxX = Math.max(maxX, e.position_x + (e.width || 248));
+    minY = Math.min(minY, e.position_y);
+    maxY = Math.max(maxY, e.position_y + (e.height || 140));
+  });
+
+  const pad = 80;
+  const contentW = maxX - minX + pad * 2;
+  const contentH = maxY - minY + pad * 2;
+  const scaleX = viewport.clientWidth / contentW;
+  const scaleY = viewport.clientHeight / contentH;
+  const newZoom = Math.max(0.1, Math.min(2, Math.min(scaleX, scaleY)));
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  S.zoom = newZoom;
+  S.panX = viewport.clientWidth / 2 - centerX * newZoom;
+  S.panY = viewport.clientHeight / 2 - centerY * newZoom;
+  applyTransform();
+  setStatus('Zoomed to fit all nodes');
+}
+
+document.getElementById('btn-zoom-fit')?.addEventListener('click', zoomToFit);
+
+// ══ [4] SPOTLIGHT SEARCH (Ctrl+K) ────────────────────────────────────────────
+(function buildSpotlight() {
+  const overlay = document.createElement('div');
+  overlay.id = 'spotlight-overlay';
+  overlay.innerHTML = `
+    <div id="spotlight-panel">
+      <input id="spotlight-input" type="text" placeholder="Search nodes by title or content…" autocomplete="off" spellcheck="false"/>
+      <div id="spotlight-results"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const input = overlay.querySelector('#spotlight-input');
+  const results = overlay.querySelector('#spotlight-results');
+  let activeIdx = -1;
+
+  function openSpotlight() {
+    overlay.classList.add('is-open');
+    input.value = '';
+    renderResults('');
+    requestAnimationFrame(() => input.focus());
+  }
+
+  function closeSpotlight() {
+    overlay.classList.remove('is-open');
+    activeIdx = -1;
+  }
+
+  function flyToNode(uuid) {
+    const entity = S.entities.get(String(uuid));
+    if (!entity) return;
+    closeSpotlight();
+    const cx = entity.position_x + (entity.width || 248) / 2;
+    const cy = entity.position_y + (entity.height || 140) / 2;
+    centerViewportOn(cx, cy);
+    setTimeout(() => {
+      const el = document.querySelector(`.node[data-uuid="${uuid}"]`);
+      if (el) { el.classList.add('focus-pulse'); setTimeout(() => el.classList.remove('focus-pulse'), 700); }
+    }, 300);
+  }
+
+  function renderResults(query) {
+    const q = query.trim().toLowerCase();
+    const matches = [];
+    S.entities.forEach(e => {
+      if (!q || e.title.toLowerCase().includes(q) || (e.content || '').toLowerCase().includes(q)) {
+        matches.push(e);
+      }
+    });
+
+    if (matches.length === 0) {
+      results.innerHTML = `<div class="spotlight-empty">No nodes found for "<strong>${query}</strong>"</div>`;
+      return;
+    }
+
+    results.innerHTML = matches.slice(0, 12).map((e, i) => {
+      const conf = TYPES[e.type] ?? TYPES.NOTE;
+      return `<div class="spotlight-item${i === activeIdx ? ' is-active' : ''}" data-uuid="${e.uuid}">
+        <span class="spotlight-item-icon">${conf.icon}</span>
+        <span class="spotlight-item-title">${esc(e.title)}</span>
+        <span class="spotlight-item-type">${e.type}</span>
+      </div>`;
+    }).join('');
+
+    results.querySelectorAll('.spotlight-item').forEach(item => {
+      item.addEventListener('click', () => flyToNode(item.dataset.uuid));
+    });
+  }
+
+  input.addEventListener('input', () => { activeIdx = -1; renderResults(input.value); });
+
+  input.addEventListener('keydown', e => {
+    const items = results.querySelectorAll('.spotlight-item');
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); renderResults(input.value); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); renderResults(input.value); }
+    else if (e.key === 'Enter') { const active = results.querySelector('.spotlight-item.is-active'); if (active) flyToNode(active.dataset.uuid); }
+    else if (e.key === 'Escape') closeSpotlight();
+  });
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeSpotlight(); });
+  window._openSpotlight = openSpotlight;
+  window._closeSpotlight = closeSpotlight;
+})();
+
+// ══ [5] RIGHT-CLICK CONTEXT MENU ──────────────────────────────────────────────
+(function buildContextMenu() {
+  const menu = document.createElement('div');
+  menu.id = 'ctx-menu';
+  menu.style.display = 'none';
+  document.body.appendChild(menu);
+
+  function closeMenu() { menu.style.display = 'none'; }
+
+  function showMenu(x, y, items) {
+    menu.innerHTML = items.map(item => {
+      if (item === 'divider') return `<div class="ctx-divider"></div>`;
+      return `<div class="ctx-item${item.danger ? ' ctx-item--danger' : ''}" data-action="${item.action}">
+        <span class="ctx-item-icon">${item.icon}</span>
+        <span class="ctx-item-label">${item.label}</span>
+        ${item.kbd ? `<span class="ctx-item-kbd">${item.kbd}</span>` : ''}
+      </div>`;
+    }).join('');
+
+    menu.style.display = 'block';
+    const mw = 200, mh = menu.offsetHeight;
+    menu.style.left = `${Math.min(x, window.innerWidth - mw - 8)}px`;
+    menu.style.top = `${Math.min(y, window.innerHeight - mh - 8)}px`;
+
+    menu.querySelectorAll('.ctx-item').forEach(item => {
+      item.addEventListener('click', () => { handleCtxAction(item.dataset.action); closeMenu(); });
+    });
+  }
+
+  let ctxTargetUUID = null;
+
+  function handleCtxAction(action) {
+    switch (action) {
+      case 'spotlight': window._openSpotlight(); break;
+      case 'zoom-fit': zoomToFit(); break;
+      case 'zoom-reset': S.zoom = 1; S.panX = 0; S.panY = 0; applyTransform(); break;
+      case 'export-png': exportPNG(); break;
+      case 'export-json': exportJSON(); break;
+      case 'auto-layout': autoLayout(); break;
+      case 'focus-node': if (ctxTargetUUID) enterFocusMode(ctxTargetUUID); break;
+      case 'delete-node': if (ctxTargetUUID) {
+        const btn = document.querySelector(`.node[data-uuid="${ctxTargetUUID}"] .btn-delete`);
+        btn?.click();
+      } break;
+    }
+  }
+
+  viewport.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const nodeEl = e.target.closest('.node');
+    ctxTargetUUID = nodeEl?.dataset.uuid ?? null;
+
+    const items = ctxTargetUUID
+      ? [
+        { icon: '🔭', label: 'Focus Node', action: 'focus-node' },
+        { icon: '🔍', label: 'Search…', action: 'spotlight', kbd: 'Ctrl+K' },
+        'divider',
+        { icon: '⊡', label: 'Zoom to Fit', action: 'zoom-fit', kbd: 'Ctrl+0' },
+        'divider',
+        { icon: '🗑', label: 'Delete Node', action: 'delete-node', danger: true },
+      ]
+      : [
+        { icon: '🔍', label: 'Spotlight Search', action: 'spotlight', kbd: 'Ctrl+K' },
+        { icon: '⊡', label: 'Zoom to Fit', action: 'zoom-fit', kbd: 'Ctrl+0' },
+        { icon: '⧉', label: 'Auto-Layout', action: 'auto-layout' },
+        'divider',
+        { icon: '📷', label: 'Export PNG', action: 'export-png' },
+        { icon: '{ }', label: 'Export JSON', action: 'export-json' },
+        'divider',
+        { icon: '↺', label: 'Reset View', action: 'zoom-reset' },
+      ];
+
+    showMenu(e.clientX, e.clientY, items);
+  });
+
+  document.addEventListener('click', closeMenu);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+})();
+
+// ══ [6] EXPORT PNG ──────────────────────────────────────────────────────────
+async function exportPNG() {
+  setStatus('Capturing canvas…', 'saving');
+  try {
+    // Use the browser's native print-like approach via SVG foreignObject
+    const bounds = getCanvasBounds();
+    const scale = 1.5;
+    const W = Math.round(bounds.width * scale);
+    const H = Math.round(bounds.height * scale);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0a0a0e';
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw each node as a rectangle block
+    S.entities.forEach(entity => {
+      const x = (entity.position_x - bounds.minX) * scale;
+      const y = (entity.position_y - bounds.minY) * scale;
+      const w = (entity.width || 248) * scale;
+      const h = (entity.height || 140) * scale;
+      const conf = TYPES[entity.type] ?? TYPES.NOTE;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(20,20,25,0.9)';
+      ctx.strokeStyle = accent(entity) + '88';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 8 * scale);
+      ctx.fill();
+      ctx.stroke();
+
+      // Header line
+      ctx.fillStyle = accent(entity) + 'aa';
+      ctx.fillRect(x, y, w, 3 * scale);
+
+      // Title text
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `600 ${13 * scale}px Inter, sans-serif`;
+      ctx.fillText(entity.title.slice(0, 30), x + 10 * scale, y + 24 * scale);
+
+      // Type label
+      ctx.fillStyle = accent(entity);
+      ctx.font = `${9 * scale}px monospace`;
+      ctx.fillText(entity.type, x + 10 * scale, y + 38 * scale);
+
+      ctx.restore();
+    });
+
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `space-canvas-${Date.now()}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus('Canvas exported as PNG');
+    }, 'image/png');
+  } catch (err) {
+    setStatus(`Export failed: ${err.message}`, 'error');
+  }
+}
+document.getElementById('btn-export-png')?.addEventListener('click', exportPNG);
+
+// ══ [7] EXPORT JSON ──────────────────────────────────────────────────────────
+function exportJSON() {
+  const payload = {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    entities: Array.from(S.entities.values()),
+    bloodlines: S.bloodlines,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `space-export-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('Canvas exported as JSON');
+}
+document.getElementById('btn-export-json')?.addEventListener('click', exportJSON);
+
+// ══ [8] AUTO-LAYOUT ENGINE (force-directed) ──────────────────────────────────
+function autoLayout() {
+  if (S.entities.size < 2) { setStatus('Need more nodes to auto-layout'); return; }
+  setStatus('Running auto-layout…', 'saving');
+
+  const nodes = Array.from(S.entities.values()).map(e => ({
+    uuid: String(e.uuid),
+    x: e.position_x,
+    y: e.position_y,
+    w: e.width || 248,
+    h: e.height || 140,
+    vx: 0, vy: 0,
+  }));
+
+  const nodeMap = Object.fromEntries(nodes.map(n => [n.uuid, n]));
+  const iterations = 80;
+  const repulsion = 18000;
+  const attraction = 0.05;
+  const damping = 0.85;
+  const idealDist = 320;
+
+  for (let i = 0; i < iterations; i++) {
+    // Repulsion between all pairs
+    for (let a = 0; a < nodes.length; a++) {
+      for (let b = a + 1; b < nodes.length; b++) {
+        const na = nodes[a], nb = nodes[b];
+        const dx = na.x - nb.x || 0.1;
+        const dy = na.y - nb.y || 0.1;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = repulsion / (dist * dist);
+        na.vx += (dx / dist) * force;
+        na.vy += (dy / dist) * force;
+        nb.vx -= (dx / dist) * force;
+        nb.vy -= (dy / dist) * force;
+      }
+    }
+
+    // Attraction along bloodlines
+    S.bloodlines.forEach(bl => {
+      const src = nodeMap[String(bl.source)];
+      const tgt = nodeMap[String(bl.target)];
+      if (!src || !tgt) return;
+      const dx = tgt.x - src.x;
+      const dy = tgt.y - src.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const diff = (dist - idealDist) * attraction;
+      src.vx += (dx / dist) * diff;
+      src.vy += (dy / dist) * diff;
+      tgt.vx -= (dx / dist) * diff;
+      tgt.vy -= (dy / dist) * diff;
+    });
+
+    // Apply velocities with damping
+    nodes.forEach(n => {
+      n.vx *= damping;
+      n.vy *= damping;
+      n.x += n.vx;
+      n.y += n.vy;
+    });
+  }
+
+  // Commit snapped positions
+  nodes.forEach(n => {
+    const entity = S.entities.get(n.uuid);
+    if (!entity) return;
+    entity.position_x = snap(n.x);
+    entity.position_y = snap(n.y);
+    const el = document.querySelector(`.node[data-uuid="${n.uuid}"]`);
+    if (el) { el.style.left = `${entity.position_x}px`; el.style.top = `${entity.position_y}px`; }
+    API.patchEntity(n.uuid, { position_x: entity.position_x, position_y: entity.position_y });
+  });
+
+  renderConnections();
+  updateMinimap();
+  setTimeout(zoomToFit, 200);
+  setStatus('Auto-layout complete ✓');
+}
+document.getElementById('btn-auto-layout')?.addEventListener('click', autoLayout);
+
+// ══ [9] FOCUS MODE ──────────────────────────────────────────────────────────
+const focusExitBtn = document.createElement('button');
+focusExitBtn.id = 'focus-exit-btn';
+focusExitBtn.textContent = '✕ Exit Focus Mode';
+focusExitBtn.addEventListener('click', exitFocusMode);
+document.body.appendChild(focusExitBtn);
+
+function enterFocusMode(uuid) {
+  document.querySelectorAll('.node').forEach(el => el.classList.remove('is-focused'));
+  const el = document.querySelector(`.node[data-uuid="${uuid}"]`);
+  if (!el) return;
+  el.classList.add('is-focused');
+  document.body.classList.add('focus-mode');
+  const entity = S.entities.get(uuid);
+  if (entity) centerViewportOn(entity.position_x + (entity.width || 248) / 2, entity.position_y + (entity.height || 140) / 2);
+  setStatus('Focus mode — click "Exit Focus Mode" to return');
+}
+
+function exitFocusMode() {
+  document.body.classList.remove('focus-mode');
+  document.querySelectorAll('.node').forEach(el => el.classList.remove('is-focused'));
+  setStatus('All changes saved');
+}
+
+// Double-click node header to enter focus mode
+nodesLayer.addEventListener('dblclick', e => {
+  const nodeEl = e.target.closest('.node');
+  if (!nodeEl) return;
+  if (e.target.closest('.node-note-preview') || e.target.closest('textarea') || e.target.closest('input')) return;
+  enterFocusMode(nodeEl.dataset.uuid);
+});
+
+// ══ [10] TAG SYSTEM & FILTER BAR ─────────────────────────────────────────────
+const tagBar = document.createElement('div');
+tagBar.id = 'tag-bar';
+tagBar.classList.add('is-empty');
+document.body.appendChild(tagBar);
+
+let activeTag = null;
+
+function extractTags() {
+  const tags = new Set();
+  S.entities.forEach(e => {
+    const matches = (e.title + ' ' + (e.content || '')).match(/#[\w-]+/g) || [];
+    matches.forEach(t => tags.add(t));
+  });
+  return tags;
+}
+
+function refreshTagBar() {
+  const tags = extractTags();
+  if (tags.size === 0) { tagBar.classList.add('is-empty'); return; }
+  tagBar.classList.remove('is-empty');
+  tagBar.innerHTML = `<span class="tag-chip${!activeTag ? ' is-active' : ''}" data-tag="__all__">All</span>` +
+    Array.from(tags).map(t => `<span class="tag-chip${activeTag === t ? ' is-active' : ''}" data-tag="${esc(t)}">${esc(t)}</span>`).join('');
+
+  tagBar.querySelectorAll('.tag-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      activeTag = chip.dataset.tag === '__all__' ? null : chip.dataset.tag;
+      applyTagFilter();
+      refreshTagBar();
+    });
+  });
+}
+
+function applyTagFilter() {
+  document.querySelectorAll('.node').forEach(el => {
+    const entity = S.entities.get(el.dataset.uuid);
+    if (!activeTag || !entity) { el.style.opacity = ''; el.style.pointerEvents = ''; return; }
+    const text = entity.title + ' ' + (entity.content || '');
+    const matches = text.includes(activeTag);
+    el.style.opacity = matches ? '' : '0.18';
+    el.style.pointerEvents = matches ? '' : 'none';
+  });
+}
+
+// ══ [11] FLOATING SIDEBAR PANEL ──────────────────────────────────────────────
+(function buildSidebar() {
+  const panel = document.createElement('div');
+  panel.id = 'sidebar-panel';
+  document.body.appendChild(panel);
+
+  function refreshSidebar() {
+    const stats = { total: S.entities.size };
+    Object.keys(TYPES).forEach(t => {
+      stats[t] = Array.from(S.entities.values()).filter(e => e.type === t).length;
+    });
+
+    panel.innerHTML = `
+      <p class="sidebar-title">Canvas Stats</p>
+      <div class="sidebar-stat-row"><span>Total Nodes</span><span class="sidebar-stat-val">${stats.total}</span></div>
+      ${Object.entries(TYPES).map(([t, cfg]) => `
+        <div class="sidebar-stat-row">
+          <span>${cfg.icon} ${cfg.label}</span>
+          <span class="sidebar-stat-val" style="color:${cfg.color}">${stats[t] || 0}</span>
+        </div>`).join('')}
+      <p class="sidebar-title">Quick Templates</p>
+      <button class="sidebar-template-btn" data-type="NOTE" data-title="Meeting Notes" data-content="# Agenda\n- Item 1\n- Item 2">☑ Meeting Notes</button>
+      <button class="sidebar-template-btn" data-type="TODO" data-title="Sprint Tasks" data-content="[ ] Task 1\n[ ] Task 2\n[ ] Task 3">✓ Sprint Tasks</button>
+      <button class="sidebar-template-btn" data-type="CODE" data-title="Code Snippet" data-content="///lang=javascript\n// Your code here">⌥ Code Snippet</button>
+      <button class="sidebar-template-btn" data-type="CANVAS" data-title="Sketch Board" data-content="">⬡ Sketch Board</button>
+      <p class="sidebar-title">Actions</p>
+      <button class="sidebar-section-btn" id="sb-zoom-fit">⊡ Zoom to Fit</button>
+      <button class="sidebar-section-btn" id="sb-auto-layout">⧉ Auto-Layout</button>
+      <button class="sidebar-section-btn" id="sb-export-json">↓ Export JSON</button>`;
+
+    panel.querySelectorAll('.sidebar-template-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { type, title, content } = btn.dataset;
+        await spawnNode(type, title, content);
+        refreshSidebar();
+        refreshTagBar();
+      });
+    });
+
+    panel.querySelector('#sb-zoom-fit')?.addEventListener('click', zoomToFit);
+    panel.querySelector('#sb-auto-layout')?.addEventListener('click', autoLayout);
+    panel.querySelector('#sb-export-json')?.addEventListener('click', exportJSON);
+  }
+
+  const toggle = document.getElementById('sidebar-toggle');
+  toggle?.addEventListener('click', () => {
+    panel.classList.toggle('is-open');
+    if (panel.classList.contains('is-open')) refreshSidebar();
+  });
+
+  window._refreshSidebar = refreshSidebar;
+})();
+
+// ══ [12] CONNECTION HOVER TOOLTIP ────────────────────────────────────────────
+(function buildConnTooltip() {
+  const tooltip = document.createElement('div');
+  tooltip.id = 'conn-tooltip';
+  tooltip.innerHTML = `<div class="tt-type"></div><div class="tt-title"></div>`;
+  document.body.appendChild(tooltip);
+
+  connLayer.addEventListener('mouseover', e => {
+    const path = e.target.closest('.connection-path');
+    if (!path) return;
+    const tgtUUID = path.dataset.target;
+    const entity = S.entities.get(tgtUUID);
+    if (!entity) return;
+    const conf = TYPES[entity.type] ?? TYPES.NOTE;
+    tooltip.querySelector('.tt-type').textContent = `${conf.icon} ${entity.type}`;
+    tooltip.querySelector('.tt-title').textContent = entity.title;
+    tooltip.classList.add('is-visible');
+  });
+
+  connLayer.addEventListener('mousemove', e => {
+    tooltip.style.left = `${e.clientX + 14}px`;
+    tooltip.style.top = `${e.clientY - 10}px`;
+  });
+
+  connLayer.addEventListener('mouseout', e => {
+    if (!e.relatedTarget?.closest('.connection-path')) tooltip.classList.remove('is-visible');
+  });
+})();
+
+// ══ [13] ANIMATED PARTICLE DATA FLOW ─────────────────────────────────────────
+const particles = [];
+let particleRAF = null;
+
+function spawnParticle(path) {
+  const length = path.getTotalLength();
+  if (length < 10) return;
+  particles.push({ path, t: 0, speed: 0.004 + Math.random() * 0.003, length });
+}
+
+function animateParticles() {
+  // Remove old particles SVG elements
+  connLayer.querySelectorAll('.flow-particle').forEach(p => p.remove());
+
+  particles.forEach((p, i) => {
+    p.t += p.speed;
+    if (p.t > 1) { particles.splice(i, 1); return; }
+    try {
+      const pt = p.path.getPointAtLength(p.t * p.length);
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', pt.x);
+      circle.setAttribute('cy', pt.y);
+      circle.setAttribute('r', 3.5);
+      circle.setAttribute('fill', '#a78bfa');
+      circle.setAttribute('opacity', String(1 - p.t));
+      circle.classList.add('flow-particle');
+      connLayer.appendChild(circle);
+    } catch (_) { }
+  });
+
+  particleRAF = requestAnimationFrame(animateParticles);
+}
+
+function startParticleFlow() {
+  if (particleRAF) return;
+  animateParticles();
+
+  // Spawn particles on interval
+  setInterval(() => {
+    const paths = Array.from(connLayer.querySelectorAll('.connection-path'));
+    paths.forEach(path => {
+      if (Math.random() < 0.4) spawnParticle(path);
+    });
+  }, 800);
+}
+
+// ══ [14] NODE BOOKMARKS / WAYPOINTS ──────────────────────────────────────────
+(function buildWaypoints() {
+  const bar = document.createElement('div');
+  bar.id = 'waypoint-bar';
+  document.body.appendChild(bar);
+
+  const waypoints = {};
+
+  function render() {
+    bar.innerHTML = [1, 2, 3, 4, 5].map(n =>
+      `<button class="waypoint-btn${waypoints[n] ? ' is-set' : ''}" data-n="${n}" title="${waypoints[n] ? `Go to waypoint ${n}` : `Save waypoint ${n} (Ctrl+${n})`}">${n}</button>`
+    ).join('');
+    bar.querySelectorAll('.waypoint-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const n = parseInt(btn.dataset.n);
+        if (e.shiftKey || !waypoints[n]) {
+          waypoints[n] = { panX: S.panX, panY: S.panY, zoom: S.zoom };
+          setStatus(`Waypoint ${n} saved`);
+          render();
+        } else {
+          const wp = waypoints[n];
+          Object.assign(S, { panX: wp.panX, panY: wp.panY, zoom: wp.zoom });
+          applyTransform();
+          setStatus(`Teleported to waypoint ${n}`);
+        }
+      });
+    });
+  }
+
+  render();
+
+  // Keyboard teleport (Ctrl+1..5)
+  window.addEventListener('keydown', e => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    const n = parseInt(e.key);
+    if (n >= 1 && n <= 5) {
+      e.preventDefault();
+      if (e.shiftKey || !waypoints[n]) {
+        waypoints[n] = { panX: S.panX, panY: S.panY, zoom: S.zoom };
+        setStatus(`Waypoint ${n} saved`);
+        render();
+      } else {
+        const wp = waypoints[n];
+        Object.assign(S, { panX: wp.panX, panY: wp.panY, zoom: wp.zoom });
+        applyTransform();
+        setStatus(`Teleported to waypoint ${n}`);
+      }
+    }
+  });
+})();
+
+// ══ [15] PERFORMANCE VIRTUALIZATION ─────────────────────────────────────────
+function virtualizeNodes() {
+  if (S.entities.size < 30) return; // Only kick in for large canvases
+  const vp = viewport.getBoundingClientRect();
+  const margin = 300;
+
+  document.querySelectorAll('.node').forEach(el => {
+    const rect = el.getBoundingClientRect();
+    const visible = rect.right > vp.left - margin &&
+      rect.left < vp.right + margin &&
+      rect.bottom > vp.top - margin &&
+      rect.top < vp.bottom + margin;
+    el.style.visibility = visible ? '' : 'hidden';
+    el.style.pointerEvents = visible ? '' : 'none';
+  });
+}
+
+// ── Virtualize on wheel scroll ────────────────────────────────────────────────
+viewport.addEventListener('wheel', () => { setTimeout(virtualizeNodes, 50); }, { passive: true });
+
+// ══ KEYBOARD SHORTCUTS EXTENSION ─────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); window._openSpotlight(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); zoomToFit(); }
+  if (e.key === 'Escape') exitFocusMode();
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
+
 async function init() {
   setStatus('Loading…', 'saving');
   try {
