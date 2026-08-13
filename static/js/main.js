@@ -1986,56 +1986,8 @@ function startParticleFlow() {
   }, 800);
 }
 
-// ══ [14] NODE BOOKMARKS / WAYPOINTS ──────────────────────────────────────────
-(function buildWaypoints() {
-  const bar = document.createElement('div');
-  bar.id = 'waypoint-bar';
-  document.body.appendChild(bar);
+// ══ [14] NODE BOOKMARKS / WAYPOINTS — REMOVED BY USER REQUEST ───────────────
 
-  const waypoints = {};
-
-  function render() {
-    bar.innerHTML = [1, 2, 3, 4, 5].map(n =>
-      `<button class="waypoint-btn${waypoints[n] ? ' is-set' : ''}" data-n="${n}" title="${waypoints[n] ? `Go to waypoint ${n}` : `Save waypoint ${n} (Ctrl+${n})`}">${n}</button>`
-    ).join('');
-    bar.querySelectorAll('.waypoint-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        const n = parseInt(btn.dataset.n);
-        if (e.shiftKey || !waypoints[n]) {
-          waypoints[n] = { panX: S.panX, panY: S.panY, zoom: S.zoom };
-          setStatus(`Waypoint ${n} saved`);
-          render();
-        } else {
-          const wp = waypoints[n];
-          Object.assign(S, { panX: wp.panX, panY: wp.panY, zoom: wp.zoom });
-          applyTransform();
-          setStatus(`Teleported to waypoint ${n}`);
-        }
-      });
-    });
-  }
-
-  render();
-
-  // Keyboard teleport (Ctrl+1..5)
-  window.addEventListener('keydown', e => {
-    if (!e.ctrlKey && !e.metaKey) return;
-    const n = parseInt(e.key);
-    if (n >= 1 && n <= 5) {
-      e.preventDefault();
-      if (e.shiftKey || !waypoints[n]) {
-        waypoints[n] = { panX: S.panX, panY: S.panY, zoom: S.zoom };
-        setStatus(`Waypoint ${n} saved`);
-        render();
-      } else {
-        const wp = waypoints[n];
-        Object.assign(S, { panX: wp.panX, panY: wp.panY, zoom: wp.zoom });
-        applyTransform();
-        setStatus(`Teleported to waypoint ${n}`);
-      }
-    }
-  });
-})();
 
 // ══ [15] PERFORMANCE VIRTUALIZATION ─────────────────────────────────────────
 function virtualizeNodes() {

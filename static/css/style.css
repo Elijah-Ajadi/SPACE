@@ -1670,46 +1670,6 @@ body.animations-off #loading-overlay {
 }
 
 /* ============================================
-   GOD ULTRA — BOOKMARK WAYPOINTS
-   ============================================ */
-#waypoint-bar {
-  position: fixed;
-  bottom: 70px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 6px;
-  z-index: 900;
-}
-
-.waypoint-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: rgba(14, 14, 18, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--text-dim);
-  font-size: 11px;
-  font-family: var(--font-mono);
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  transition: background var(--transition), color var(--transition), border-color var(--transition);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.waypoint-btn.is-set {
-  border-color: var(--note);
-  color: var(--text);
-}
-
-.waypoint-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
-}
-
-/* ============================================
    GOD ULTRA — NODE TIMESTAMP CHIP
    ============================================ */
 .node-timestamp {
@@ -1851,21 +1811,6 @@ body.animations-off #loading-overlay {
   .status-bar span:first-child {
     display: none;
     /* Hide 'Alucard Space' label on mobile */
-  }
-
-  /* Waypoint Bar - Centered above bottom edge */
-  #waypoint-bar {
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 4px 8px;
-    gap: 6px;
-  }
-
-  .waypoint-btn {
-    width: 38px;
-    height: 38px;
-    font-size: 14px;
   }
 
   /* Minimap - Collapsible toggle button */
