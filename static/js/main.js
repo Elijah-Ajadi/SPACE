@@ -538,7 +538,7 @@ function renderNode(entity) {
 
     const openEditMode = () => {
       previewEl.style.display = 'none';
-      wrapEl.style.display = 'flex';
+      wrapEl.style.display = 'block';
       textarea.focus();
     };
 
@@ -567,7 +567,7 @@ function renderNode(entity) {
       entity.content = textarea.value;
       previewEl.innerHTML = parseMarkdown(entity.content);
       wrapEl.style.display = 'none';
-      previewEl.style.display = 'flex';
+      previewEl.style.display = 'block';
 
       setStatus('Saving…', 'saving');
       API.patchEntity(uuid, { content: entity.content })

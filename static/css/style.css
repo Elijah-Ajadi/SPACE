@@ -435,6 +435,7 @@ body {
 
 /* Note-specific markdown preview */
 .node-note-preview {
+  display: block;
   padding: 8px 12px 10px;
   color: var(--text-muted);
   font-size: 12px;
