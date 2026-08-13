@@ -115,12 +115,25 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
 # Production: run `python manage.py collectstatic` to gather files here
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
+
+# Tell WhiteNoise to serve files directly from STATICFILES_DIRS (for Vercel serverless deployment)
+WHITENOISE_USE_FINDERS = True
+
 
 # Media files (user uploads)
 MEDIA_URL = "/media/"
