@@ -2,3 +2,5 @@ Django==5.2.7
 django-cors-headers==4.9.0
 python-dotenv==1.2.1
 whitenoise==6.9.0
+dj-database-url==2.3.0
+psycopg2-binary==2.9.10
