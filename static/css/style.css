@@ -1441,18 +1441,29 @@ body.focus-mode #focus-exit-btn {
 }
 
 /* ============================================
-   GOD ULTRA — DYNAMIC CURSOR BACKGROUND
+   GOD ULTRA — ANIMATIONS TOGGLE
+   (body.animations-off disables all motion)
    ============================================ */
-#viewport::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(600px circle at var(--cursor-x, 50%) var(--cursor-y, 50%),
-      rgba(139, 92, 246, 0.04) 0%,
-      transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-  transition: background 0.1s ease;
+body.animations-off .connection-path {
+  animation: none !important;
+  stroke-dasharray: none !important;
+}
+
+body.animations-off .flow-particle {
+  display: none !important;
+}
+
+body.animations-off .node {
+  animation: none !important;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease !important;
+}
+
+body.animations-off .node-todo-checkbox {
+  transition: none !important;
+}
+
+body.animations-off #loading-overlay {
+  transition: none !important;
 }
 
 /* ============================================

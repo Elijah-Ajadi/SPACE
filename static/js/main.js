@@ -1216,12 +1216,8 @@ window.addEventListener('unhandledrejection', e => {
 // ════════════════  GOD ULTRA — ALL 15 FEATURES  ════════════════════════════
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ══ [1] DYNAMIC BACKGROUND CURSOR SHADER ────────────────────────────────────
-viewport.addEventListener('mousemove', e => {
-  const r = viewport.getBoundingClientRect();
-  viewport.style.setProperty('--cursor-x', `${e.clientX - r.left}px`);
-  viewport.style.setProperty('--cursor-y', `${e.clientY - r.top}px`);
-});
+// ══ [1] CURSOR SHADER — REMOVED (disabled by user preference)
+
 
 // ══ [2] TOOLBAR EXTRA BUTTONS (Zoom-Fit, Export PNG, Sidebar toggle, JSON) ─
 (function buildToolbarExtras() {
@@ -1701,7 +1697,9 @@ function applyTagFilter() {
       <p class="sidebar-title">Actions</p>
       <button class="sidebar-section-btn" id="sb-zoom-fit">⊡ Zoom to Fit</button>
       <button class="sidebar-section-btn" id="sb-auto-layout">⧉ Auto-Layout</button>
-      <button class="sidebar-section-btn" id="sb-export-json">↓ Export JSON</button>`;
+      <button class="sidebar-section-btn" id="sb-export-json">↓ Export JSON</button>
+      <p class="sidebar-title">Settings</p>
+      <button class="sidebar-section-btn" id="sb-anim-toggle" style="background: var(--surface-2); border: 1px solid rgba(255,255,255,0.1); color: var(--text)">${document.body.classList.contains('animations-off') ? '▶ Enable Animations' : '⏸ Disable Animations'}</button>`;
 
     panel.querySelectorAll('.sidebar-template-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1715,6 +1713,19 @@ function applyTagFilter() {
     panel.querySelector('#sb-zoom-fit')?.addEventListener('click', zoomToFit);
     panel.querySelector('#sb-auto-layout')?.addEventListener('click', autoLayout);
     panel.querySelector('#sb-export-json')?.addEventListener('click', exportJSON);
+    panel.querySelector('#sb-anim-toggle')?.addEventListener('click', () => {
+      document.body.classList.toggle('animations-off');
+      const isOff = document.body.classList.contains('animations-off');
+      panel.querySelector('#sb-anim-toggle').textContent = isOff ? '▶ Enable Animations' : '⏸ Disable Animations';
+      setStatus(isOff ? 'Animations disabled' : 'Animations enabled');
+      // Stop/start particle flow
+      if (isOff) {
+        if (particleRAF) { cancelAnimationFrame(particleRAF); particleRAF = null; }
+        connLayer.querySelectorAll('.flow-particle').forEach(p => p.remove());
+      } else {
+        startParticleFlow();
+      }
+    });
   }
 
   const toggle = document.getElementById('sidebar-toggle');
