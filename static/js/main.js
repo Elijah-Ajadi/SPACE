@@ -1227,7 +1227,8 @@ window.addEventListener('unhandledrejection', e => {
   extra.innerHTML = `
     <button class="toolbar-icon-btn" id="btn-zoom-fit" title="Zoom to Fit (Ctrl+0)">⊡</button>
     <button class="toolbar-icon-btn" id="btn-export-png" title="Export as PNG">📷</button>
-    <button class="toolbar-icon-btn" id="btn-export-json" title="Export as JSON">{ }</button>
+    <button class="toolbar-icon-btn" id="btn-export-json" title="Export as JSON">↓</button>
+    <button class="toolbar-icon-btn" id="btn-import-json" title="Import JSON Canvas">↑</button>
     <button class="toolbar-icon-btn" id="btn-auto-layout" title="Auto-Layout Nodes">⧉</button>`;
   toolbar.appendChild(extra);
 
@@ -1388,6 +1389,7 @@ document.getElementById('btn-zoom-fit')?.addEventListener('click', zoomToFit);
       case 'zoom-reset': S.zoom = 1; S.panX = 0; S.panY = 0; applyTransform(); break;
       case 'export-png': exportPNG(); break;
       case 'export-json': exportJSON(); break;
+      case 'import-json': importJSON(); break;
       case 'auto-layout': autoLayout(); break;
       case 'focus-node': if (ctxTargetUUID) enterFocusMode(ctxTargetUUID); break;
       case 'delete-node': if (ctxTargetUUID) {
@@ -1417,7 +1419,8 @@ document.getElementById('btn-zoom-fit')?.addEventListener('click', zoomToFit);
         { icon: '⧉', label: 'Auto-Layout', action: 'auto-layout' },
         'divider',
         { icon: '📷', label: 'Export PNG', action: 'export-png' },
-        { icon: '{ }', label: 'Export JSON', action: 'export-json' },
+        { icon: '↓', label: 'Export JSON', action: 'export-json' },
+        { icon: '↑', label: 'Import JSON', action: 'import-json' },
         'divider',
         { icon: '↺', label: 'Reset View', action: 'zoom-reset' },
       ];
@@ -1513,6 +1516,78 @@ function exportJSON() {
   setStatus('Canvas exported as JSON');
 }
 document.getElementById('btn-export-json')?.addEventListener('click', exportJSON);
+
+function importJSON() {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.json';
+  fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+
+  fileInput.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) { fileInput.remove(); return; }
+
+    setStatus('Importing canvas JSON…', 'saving');
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+
+      const rawEntities = Array.isArray(payload) ? payload : (payload.entities || []);
+      const rawBloodlines = payload.bloodlines || [];
+
+      if (!Array.isArray(rawEntities) || rawEntities.length === 0) {
+        throw new Error('Invalid or empty JSON format (no entities found)');
+      }
+
+      const uuidMap = {};
+      let importedCount = 0;
+
+      // Spawn entities
+      for (const ent of rawEntities) {
+        const created = await API.createEntity({
+          type: ent.type || 'NOTE',
+          title: ent.title || 'Imported Node',
+          content: ent.content || '',
+          color: ent.color || '#18181b',
+          position_x: ent.position_x ?? 100,
+          position_y: ent.position_y ?? 100,
+          width: ent.width || 248,
+          height: ent.height || 140,
+        });
+        const oldUuid = String(ent.uuid);
+        const newUuid = String(created.uuid);
+        uuidMap[oldUuid] = newUuid;
+        S.entities.set(newUuid, created);
+        importedCount++;
+      }
+
+      // Reconstruct connections
+      for (const bl of rawBloodlines) {
+        const newSrc = uuidMap[String(bl.source)];
+        const newTgt = uuidMap[String(bl.target)];
+        if (newSrc && newTgt) {
+          try {
+            const createdBl = await API.createBloodline(newSrc, newTgt);
+            S.bloodlines.push(createdBl);
+          } catch (_) { }
+        }
+      }
+
+      renderAll();
+      setTimeout(zoomToFit, 200);
+      setStatus(`Imported ${importedCount} nodes & connections ✓`);
+    } catch (err) {
+      console.error('Import failed:', err);
+      setStatus(`Import Error: ${err.message}`, 'error');
+    } finally {
+      fileInput.remove();
+    }
+  });
+
+  fileInput.click();
+}
+document.getElementById('btn-import-json')?.addEventListener('click', importJSON);
 
 // ══ [8] AUTO-LAYOUT ENGINE (force-directed) ──────────────────────────────────
 function autoLayout() {
@@ -1698,6 +1773,7 @@ function applyTagFilter() {
       <button class="sidebar-section-btn" id="sb-zoom-fit">⊡ Zoom to Fit</button>
       <button class="sidebar-section-btn" id="sb-auto-layout">⧉ Auto-Layout</button>
       <button class="sidebar-section-btn" id="sb-export-json">↓ Export JSON</button>
+      <button class="sidebar-section-btn" id="sb-import-json">↑ Import JSON</button>
       <p class="sidebar-title">Settings</p>
       <button class="sidebar-section-btn" id="sb-anim-toggle" style="background: var(--surface-2); border: 1px solid rgba(255,255,255,0.1); color: var(--text)">${document.body.classList.contains('animations-off') ? '▶ Enable Animations' : '⏸ Disable Animations'}</button>`;
 
@@ -1713,6 +1789,7 @@ function applyTagFilter() {
     panel.querySelector('#sb-zoom-fit')?.addEventListener('click', zoomToFit);
     panel.querySelector('#sb-auto-layout')?.addEventListener('click', autoLayout);
     panel.querySelector('#sb-export-json')?.addEventListener('click', exportJSON);
+    panel.querySelector('#sb-import-json')?.addEventListener('click', importJSON);
     panel.querySelector('#sb-anim-toggle')?.addEventListener('click', () => {
       document.body.classList.toggle('animations-off');
       const isOff = document.body.classList.contains('animations-off');

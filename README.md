@@ -26,7 +26,8 @@ SPACE is equipped with **15 advanced canvas interactions & productivity tools**:
 | **🐭 Context Menu** | Canvas-aware glassmorphic right-click menu with context-specific actions | Right-Click anywhere |
 | **⊡ Zoom-to-Fit** | Auto-calculates canvas bounding box and scales viewport to fit all nodes smoothly | `Ctrl + 0` or Toolbar `⊡` button |
 | **📷 Export PNG** | Renders full canvas into a high-resolution `.png` snapshot download | Toolbar `📷` or Right-Click |
-| **{ } Export JSON** | Exports full canvas state (nodes + bloodline connections) to `.json` file | Toolbar `{ }` or Right-Click |
+| **{ } Export JSON** | Exports full canvas state (nodes + bloodline connections) to `.json` file | Toolbar `↓` or Sidebar `↓ Export JSON` |
+| **↑ Import JSON** | Restores canvas nodes & bloodline links from any exported `.json` file | Toolbar `↑` or Sidebar `↑ Import JSON` |
 | **⧉ Auto-Layout** | Force-directed graph layout engine that auto-arranges and spaces out nodes | Toolbar `⧉` or Sidebar action |
 | **🔭 Focus Mode** | Isolates a node by centering it and blurring out non-focused canvas content | Double-click header or Context Menu |
 | **🏷️ Tag System** | Inline `#tag` parsing with real-time interactive tag filter bar at bottom | Click tags on `#tag-bar` |
