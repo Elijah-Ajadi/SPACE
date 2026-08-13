@@ -1,0 +1,10 @@
+.env
+.venv
+venv/
+db.sqlite3
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.gemini/
+media/uploads/
