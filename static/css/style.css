@@ -1785,3 +1785,171 @@ body.animations-off #loading-overlay {
 .node.focus-pulse {
   animation: focusPulse 0.6s ease;
 }
+
+/* ============================================
+   MOBILE RESPONSIVE & TOUCH SUITE (< 768px)
+   ============================================ */
+@media (max-width: 768px) {
+  #ui-overlay {
+    padding: 10px;
+    pointer-events: none;
+  }
+
+  .toolbar {
+    padding: 6px 10px;
+    gap: 6px;
+    max-width: calc(100vw - 20px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .zoom-slider {
+    display: none !important;
+  }
+
+  .zoom-indicator {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-width: 44px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .toolbar-icon-btn {
+    padding: 8px 10px;
+    font-size: 16px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  #add-node {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  /* Status Bar - compact floating toast at top */
+  .status-bar {
+    top: 60px;
+    bottom: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    padding: 5px 12px;
+    max-width: 90vw;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .status-bar span:first-child {
+    display: none;
+    /* Hide 'Alucard Space' label on mobile */
+  }
+
+  /* Waypoint Bar - Centered above bottom edge */
+  #waypoint-bar {
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    gap: 6px;
+  }
+
+  .waypoint-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 14px;
+  }
+
+  /* Minimap - Collapsible toggle button */
+  #minimap {
+    right: 12px;
+    bottom: 75px;
+    width: 140px;
+    height: 90px;
+    transform: scale(0.9);
+    transform-origin: bottom right;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+
+  #minimap.is-collapsed {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.5);
+  }
+
+  #minimap-toggle {
+    display: flex !important;
+    position: fixed;
+    right: 12px;
+    bottom: 75px;
+    z-index: 101;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text);
+    font-size: 16px;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+  }
+
+  /* Mobile Side Panel (Bottom Sheet Drawer) */
+  #sidebar-panel {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100vw;
+    height: 65vh;
+    border-radius: 20px 20px 0 0;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    transform: translateY(100%);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+  }
+
+  #sidebar-panel::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    margin: 8px auto 16px auto;
+  }
+
+  #sidebar-panel.is-open {
+    transform: translateY(0);
+  }
+
+  #sidebar-toggle {
+    right: 12px;
+    top: auto;
+    bottom: 135px;
+    border-radius: 20px 0 0 20px;
+  }
+
+  /* Node Resize & Touch Handles */
+  .resize-handle {
+    width: 16px;
+    height: 16px;
+  }
+
+  .btn-connect,
+  .btn-delete {
+    min-width: 28px;
+    min-height: 28px;
+  }
+}

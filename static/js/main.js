@@ -1059,7 +1059,7 @@ window.addEventListener('mouseup', () => {
 viewport.addEventListener('wheel', e => {
   e.preventDefault();
   const factor = e.deltaY < 0 ? 1.1 : 0.9;
-  const newZoom = Math.max(0.1, Math.min(5, S.zoom * factor));
+  const newZoom = Math.max(0.05, Math.min(5, S.zoom * factor));
   const r = viewport.getBoundingClientRect();
   const mx = e.clientX - r.left, my = e.clientY - r.top;
   S.panX = mx - (mx - S.panX) * (newZoom / S.zoom);
@@ -1069,20 +1069,117 @@ viewport.addEventListener('wheel', e => {
 }, { passive: false });
 
 // ── Zoom (slider) ─────────────────────────────────────────────────────────────
-zoomSlider.addEventListener('input', () => {
-  const newZoom = parseFloat(zoomSlider.value);
-  const cx = viewport.clientWidth / 2, cy = viewport.clientHeight / 2;
-  S.panX = cx - (cx - S.panX) * (newZoom / S.zoom);
-  S.panY = cy - (cy - S.panY) * (newZoom / S.zoom);
-  S.zoom = newZoom;
-  applyTransform();
-});
+if (zoomSlider) {
+  zoomSlider.min = '0.05';
+  zoomSlider.max = '5.00';
+  zoomSlider.step = '0.01';
+  zoomSlider.addEventListener('input', () => {
+    const newZoom = parseFloat(zoomSlider.value);
+    const cx = viewport.clientWidth / 2, cy = viewport.clientHeight / 2;
+    S.panX = cx - (cx - S.panX) * (newZoom / S.zoom);
+    S.panY = cy - (cy - S.panY) * (newZoom / S.zoom);
+    S.zoom = newZoom;
+    applyTransform();
+  });
+}
 
 // ── Reset zoom on indicator click ─────────────────────────────────────────────
-zoomIndicator.addEventListener('click', () => {
+zoomIndicator?.addEventListener('click', () => {
   S.zoom = 1; S.panX = 0; S.panY = 0;
   applyTransform();
 });
+
+// ── Touch & Mobile Gesture Engine ─────────────────────────────────────────────
+(function initTouchEngine() {
+  let touchStartDist = 0;
+  let initialZoom = 1;
+  let touchLongPressTimer = null;
+  let touchStartPos = { x: 0, y: 0 };
+
+  // Mobile Minimap Toggle Button
+  const mmBtn = document.createElement('button');
+  mmBtn.id = 'minimap-toggle';
+  mmBtn.innerHTML = '🗺';
+  mmBtn.title = 'Toggle Minimap';
+  document.body.appendChild(mmBtn);
+  mmBtn.addEventListener('click', () => {
+    const mm = document.getElementById('minimap');
+    mm?.classList.toggle('is-collapsed');
+  });
+
+  viewport.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const onCanvas = [viewport, world, nodesLayer, connLayer].includes(e.target)
+        || e.target.classList.contains('connection-path');
+
+      if (onCanvas) {
+        S.isPanning = true;
+        S.panStartX = touch.clientX - S.panX;
+        S.panStartY = touch.clientY - S.panY;
+        touchStartPos = { x: touch.clientX, y: touch.clientY };
+
+        // 500ms Long press trigger for context menu
+        clearTimeout(touchLongPressTimer);
+        touchLongPressTimer = setTimeout(() => {
+          if (S.isPanning) {
+            S.isPanning = false;
+            const event = new MouseEvent('contextmenu', {
+              clientX: touch.clientX,
+              clientY: touch.clientY,
+              bubbles: true
+            });
+            e.target.dispatchEvent(event);
+          }
+        }, 500);
+      }
+    } else if (e.touches.length === 2) {
+      clearTimeout(touchLongPressTimer);
+      S.isPanning = false;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      touchStartDist = Math.hypot(dx, dy);
+      initialZoom = S.zoom;
+    }
+  }, { passive: true });
+
+  viewport.addEventListener('touchmove', e => {
+    if (e.touches.length === 1 && S.isPanning) {
+      const touch = e.touches[0];
+      const moveDist = Math.hypot(touch.clientX - touchStartPos.x, touch.clientY - touchStartPos.y);
+      if (moveDist > 8) clearTimeout(touchLongPressTimer); // Cancel long press if panning finger moves
+
+      S.panX = touch.clientX - S.panStartX;
+      S.panY = touch.clientY - S.panStartY;
+      applyTransform();
+    } else if (e.touches.length === 2) {
+      clearTimeout(touchLongPressTimer);
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+
+      if (touchStartDist > 0) {
+        const factor = dist / touchStartDist;
+        const newZoom = Math.max(0.05, Math.min(5, initialZoom * factor));
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+        const r = viewport.getBoundingClientRect();
+        const mx = midX - r.left, my = midY - r.top;
+        S.panX = mx - (mx - S.panX) * (newZoom / S.zoom);
+        S.panY = my - (my - S.panY) * (newZoom / S.zoom);
+        S.zoom = newZoom;
+        applyTransform();
+      }
+    }
+  }, { passive: true });
+
+  viewport.addEventListener('touchend', () => {
+    clearTimeout(touchLongPressTimer);
+    S.isPanning = false;
+    touchStartDist = 0;
+  });
+})();
 
 // ── Add Node (type picker) ────────────────────────────────────────────────────
 let typePicker = null;
