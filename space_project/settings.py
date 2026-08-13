@@ -140,6 +140,12 @@ STATICFILES_DIRS = [
 # Production: run `python manage.py collectstatic` to gather files here
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Authentication URLs
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/login/"
+
+
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",

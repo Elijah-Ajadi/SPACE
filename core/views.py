@@ -2,12 +2,14 @@ import os
 import uuid as uuid_lib
 import json
 from django.http import JsonResponse
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.conf import settings
+from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.contrib.auth.decorators import login_required
 from .models import Entity, Bloodline
 
 # ── Page size for entity list ────────────────────────────────────────────────
@@ -16,9 +18,40 @@ MAX_PAGE_SIZE     = 200
 
 
 @ensure_csrf_cookie
+@login_required(login_url='/login/')
 def index(request):
     """Serve the SPA shell. ensure_csrf_cookie writes the csrftoken cookie."""
     return render(request, 'index.html')
+
+
+def login_view(request):
+    """Render glassmorphic login form and process authentication."""
+    if request.user.is_authenticated:
+        return redirect('/')
+
+    next_url = request.GET.get('next') or request.POST.get('next') or '/'
+
+    if request.method == 'POST':
+        username_val = request.POST.get('username', '').strip()
+        password_val = request.POST.get('password', '')
+
+        user = authenticate(request, username=username_val, password=password_val)
+        if user is not None:
+            auth_login(request, user)
+            return redirect(next_url)
+        else:
+            return render(request, 'login.html', {
+                'error': 'Invalid username or password.',
+                'next': next_url,
+            }, status=401)
+
+    return render(request, 'login.html', {'next': next_url})
+
+
+def logout_view(request):
+    """Log out user and redirect to login page."""
+    auth_logout(request)
+    return redirect('/login/')
 
 
 # ── Helper: build absolute-safe media URL ────────────────────────────────────
@@ -29,6 +62,10 @@ def _media_url(path: str) -> str:
 # ── Entities ─────────────────────────────────────────────────────────────────
 
 def entity_list_create(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+
     if request.method == 'GET':
         try:
             limit  = min(int(request.GET.get('limit',  DEFAULT_PAGE_SIZE)), MAX_PAGE_SIZE)
@@ -88,6 +125,9 @@ def entity_list_create(request):
 
 
 def entity_detail(request, uuid):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
     entity = get_object_or_404(Entity, uuid=uuid)
 
     if request.method == 'GET':
@@ -130,6 +170,9 @@ def entity_detail(request, uuid):
 # ── Bloodlines ────────────────────────────────────────────────────────────────
 
 def bloodline_list_create(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
     if request.method == 'GET':
         bloodlines = [
             {
@@ -165,6 +208,9 @@ def bloodline_list_create(request):
 
 
 def bloodline_detail(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
     bloodline = get_object_or_404(Bloodline, pk=pk)
     if request.method == 'DELETE':
         bloodline.delete()
@@ -181,6 +227,10 @@ def upload_image(request):
     Saves to MEDIA_ROOT/uploads/ and returns { url: '/media/uploads/<name>' }.
     Max size: 10 MB.
     """
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+
     uploaded = request.FILES.get('file')
     if not uploaded:
         return JsonResponse({'error': 'No file provided'}, status=400)

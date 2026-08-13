@@ -1,8 +1,40 @@
 import io
+import json
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.contrib.auth import get_user_model
 from .models import Entity, Bloodline
+
+User = get_user_model()
+
+
+
+class AuthTests(TestCase):
+    """Test login page, login submission, and unauthenticated redirects/401s."""
+
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=False)
+        self.user = User.objects.create_user(username='testuser', password='password123')
+
+    def test_unauthenticated_index_redirects_to_login(self):
+        res = self.client.get(reverse('index'))
+        self.assertEqual(res.status_code, 302)
+        self.assertIn('/login/', res.url)
+
+    def test_unauthenticated_api_returns_401(self):
+        res = self.client.get(reverse('entity-list-create'))
+        self.assertEqual(res.status_code, 401)
+
+    def test_valid_login_redirects_to_index(self):
+        res = self.client.post(reverse('login'), {'username': 'testuser', 'password': 'password123'})
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res.url, '/')
+
+    def test_invalid_login_shows_error(self):
+        res = self.client.post(reverse('login'), {'username': 'testuser', 'password': 'wrongpassword'})
+        self.assertEqual(res.status_code, 401)
+        self.assertIn('Invalid username or password', res.content.decode())
 
 
 class EntityListPaginationTests(TestCase):
@@ -10,9 +42,12 @@ class EntityListPaginationTests(TestCase):
 
     def setUp(self):
         self.client = Client(enforce_csrf_checks=False)
+        self.user = User.objects.create_user(username='testuser', password='password123')
+        self.client.force_login(self.user)
         # Create 15 entities
         for i in range(15):
             Entity.objects.create(title=f"Entity {i}", type='NOTE')
+
 
     def test_default_returns_all_when_under_limit(self):
         res = self.client.get(reverse('entity-list-create'))
@@ -50,6 +85,8 @@ class EntityCRUDTests(TestCase):
 
     def setUp(self):
         self.client = Client(enforce_csrf_checks=False)
+        self.user = User.objects.create_user(username='cruduser', password='password123')
+        self.client.force_login(self.user)
 
     def test_create_entity(self):
         import json
@@ -95,6 +132,8 @@ class EntityCRUDTests(TestCase):
 class BloodlineTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=False)
+        self.user = User.objects.create_user(username='bluser', password='password123')
+        self.client.force_login(self.user)
         self.src = Entity.objects.create(title='A', type='NOTE')
         self.tgt = Entity.objects.create(title='B', type='NOTE')
 
@@ -120,6 +159,8 @@ class BloodlineTests(TestCase):
 class ImageUploadTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=False)
+        self.user = User.objects.create_user(username='upuser', password='password123')
+        self.client.force_login(self.user)
 
     def test_upload_valid_image(self):
         # Create a minimal 1x1 PNG in memory
@@ -156,6 +197,9 @@ class CSRFTests(TestCase):
 
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
+        self.user = User.objects.create_user(username='csrfuser', password='password123')
+        self.client.force_login(self.user)
+
 
     def test_post_without_csrf_token_returns_403(self):
         import json
